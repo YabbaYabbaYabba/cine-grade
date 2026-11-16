@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Cine Grade">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Cine Grade</title>
+<style>
+:root {
+  /* Layout idea: a phone-style photo editor. Large title, inset grouped cards,
+     one segmented control that swaps the look strip, system type, one blue tint. */
+  color-scheme: light;
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --label: #000000;
+  --secondary: rgba(60, 60, 67, .62);
+  --separator: rgba(60, 60, 67, .16);
+  --fill: rgba(118, 118, 128, .14);
+  --seg-on: #ffffff;
+  --tint: #007aff;
+  --tint-soft: rgba(0, 122, 255, .13);
+  --danger: #ff3b30;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000000; --card: #1c1c1e; --label: #ffffff;
+    --secondary: rgba(235, 235, 245, .62); --separator: rgba(84, 84, 88, .62);
+    --fill: rgba(118, 118, 128, .26); --seg-on: #636366;
+    --tint: #0a84ff; --tint-soft: rgba(10, 132, 255, .2); --danger: #ff453a;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000; --card: #1c1c1e; --label: #ffffff;
+  --secondary: rgba(235, 235, 245, .62); --separator: rgba(84, 84, 88, .62);
+  --fill: rgba(118, 118, 128, .26); --seg-on: #636366;
+  --tint: #0a84ff; --tint-soft: rgba(10, 132, 255, .2); --danger: #ff453a;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--label);
+  font: 400 17px/1.35 var(--font); letter-spacing: -.01em;
+  -webkit-font-smoothing: antialiased;
+  padding: max(28px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(48px, calc(env(safe-area-inset-bottom) + 24px)) max(16px, env(safe-area-inset-left));
+  -webkit-text-size-adjust: 100%; overscroll-behavior-y: none;
+}
+button, label.btn { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, .4); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+.scrim[hidden] { display: none; }
+.sheet { background: var(--card); width: 100%; max-width: 480px; border-radius: 24px 24px 0 0; padding: 22px 16px max(20px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.sheet h2 { font-size: 20px; font-weight: 700; margin: 0; }
+.sheet p { margin: 0 0 8px; color: var(--secondary); font-size: 15px; }
+.btn.quiet { background: transparent; }
+.app { max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+header { display: flex; flex-direction: column; gap: 2px; padding: 0 4px; }
+h1 { font-size: 34px; line-height: 1.2; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+header p { margin: 0; color: var(--secondary); font-size: 15px; }
+
+.suite { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.card { background: var(--card); border-radius: 20px; }
+.section-title {
+  font-size: 13px; font-weight: 400; text-transform: uppercase; letter-spacing: .02em;
+  color: var(--secondary); margin: 0 0 7px 16px;
+}
+.footnote { font-size: 13px; color: var(--secondary); margin: 7px 16px 0; min-height: 1.35em; }
+
+/* Viewer */
+.viewer { padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; border: 2px solid transparent; }
+.viewer.drop { border-color: var(--tint); }
+.frame { position: relative; display: inline-block; line-height: 0; touch-action: none; cursor: ew-resize; max-width: 100%; border-radius: 12px; overflow: hidden; }
+#view { display: block; max-width: 100%; max-height: 58vh; width: auto; height: auto; }
+#split { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #fff; box-shadow: 0 0 4px rgba(0, 0, 0, .35); outline: none; }
+#split::after {
+  content: "‹ ›"; position: absolute; top: 50%; left: 50%; width: 36px; height: 36px; border-radius: 50%;
+  transform: translate(-50%, -50%); background: #fff; color: #3a3a3c;
+  font: 600 15px/34px var(--font); text-align: center; letter-spacing: 1px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+}
+#split:focus-visible::after { box-shadow: 0 0 0 4px var(--tint); }
+.tag {
+  position: absolute; top: 10px; padding: 4px 10px; line-height: 1.3; max-width: 60%;
+  font: 600 12px var(--font); color: #fff; border-radius: 999px; pointer-events: none;
+  background: rgba(30, 30, 30, .55); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tag.l { left: 10px; } .tag.r { right: 10px; }
+#meta { font-size: 13px; color: var(--secondary); font-variant-numeric: tabular-nums; text-align: center; }
+
+/* Looks */
+.looks { padding: 12px 0 14px; display: flex; flex-direction: column; gap: 12px; }
+.segmented { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--fill); border-radius: 9px; padding: 2px; margin: 0 12px; }
+.segmented button {
+  appearance: none; border: 0; background: transparent; color: var(--label); cursor: pointer;
+  font: 500 13px/1.2 var(--font); padding: 7px 4px; border-radius: 7px;
+}
+.segmented button[aria-selected="true"] { background: var(--seg-on); font-weight: 600; box-shadow: 0 3px 8px rgba(0, 0, 0, .12), 0 1px 1px rgba(0, 0, 0, .04); }
+.strip { overflow-x: auto; padding: 6px 16px; scrollbar-width: none; }
+.strip::-webkit-scrollbar { display: none; }
+.strip[hidden] { display: none; }
+.frames { display: flex; gap: 12px; width: max-content; }
+.look {
+  appearance: none; border: 0; background: none; color: var(--secondary); padding: 0; cursor: pointer;
+  width: 100px; font: 400 12px/1.25 var(--font); text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+}
+.look canvas { display: block; width: 100px; height: 64px; border-radius: 10px; background: var(--fill); outline: 3px solid transparent; outline-offset: 2px; }
+.look[aria-pressed="true"] { color: var(--tint); font-weight: 600; }
+.look[aria-pressed="true"] canvas { outline-color: var(--tint); }
+.look:focus-visible canvas { outline-color: var(--label); }
+#caption { font-size: 13px; color: var(--secondary); margin: 0 16px; }
+#caption b { color: var(--label); font-weight: 600; }
+
+/* Grouped controls */
+.list { overflow: hidden; }
+.cell { padding: 11px 16px 12px; position: relative; }
+.cell + .cell::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--separator); transform: scaleY(.6); }
+.cell label { display: flex; justify-content: space-between; align-items: baseline; }
+.cell output { color: var(--secondary); font-variant-numeric: tabular-nums; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 6px 0 0; background: transparent; cursor: pointer; --p: 50%;
+}
+input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--tint) var(--p), var(--fill) var(--p)); }
+input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--tint) var(--p), var(--fill) var(--p)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 28px; margin-top: -12px; border-radius: 50%; background: #fff; border: .5px solid rgba(0, 0, 0, .06); box-shadow: 0 3px 8px rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .12); }
+input[type=range]::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #fff; border: .5px solid rgba(0, 0, 0, .06); box-shadow: 0 3px 8px rgba(0, 0, 0, .18), 0 1px 2px rgba(0, 0, 0, .12); }
+input[type=range]:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; border-radius: 8px; }
+
+.btn {
+  appearance: none; border: 0; cursor: pointer; display: flex; justify-content: center; align-items: center; width: 100%;
+  min-height: 50px; padding: 0 16px; border-radius: 14px; font: 600 17px var(--font); letter-spacing: -.01em;
+  background: var(--tint-soft); color: var(--tint); transition: opacity .12s;
+}
+.btn:active { opacity: .6; }
+.btn.filled { background: var(--tint); color: #fff; }
+.btn[disabled] { opacity: .45; cursor: progress; }
+.btn:focus-visible, .segmented button:focus-visible, .plain:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plain { appearance: none; border: 0; background: none; width: 100%; text-align: left; font: 400 17px var(--font); color: var(--danger); padding: 12px 16px; cursor: pointer; border-radius: 20px; }
+.plain:active { background: var(--fill); }
+#file { position: absolute; width: 1px; height: 1px; opacity: 0; }
+#file:focus-visible + .btn { outline: 2px solid var(--tint); outline-offset: 2px; }
+
+@media (max-width: 880px) {
+  .suite { grid-template-columns: minmax(0, 1fr); }
+  #view { max-height: 46vh; }
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>Cine Grade</h1>
+  <p>Cinematic colour for your photos. Everything stays on this device.</p>
+</header>
+
+<div class="suite">
+  <div class="col">
+    <div class="card viewer" id="viewer">
+      <div class="frame" id="frame">
+        <canvas id="view" width="1280" height="720" aria-label="Graded image preview"></canvas>
+        <span class="tag l" id="tagL">Original</span>
+        <span class="tag r" id="tagR">Graded</span>
+        <div id="split" role="slider" tabindex="0" aria-label="Before and after divider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="30"></div>
+      </div>
+      <div id="meta">Sample photo</div>
+    </div>
+
+    <div class="card looks">
+      <div class="segmented" role="tablist" aria-label="Look category">
+        <button type="button" role="tab" id="tab-time" data-tab="time" aria-controls="panel-time">Light</button>
+        <button type="button" role="tab" id="tab-era" data-tab="era" aria-controls="panel-era">Era</button>
+        <button type="button" role="tab" id="tab-film" data-tab="film" aria-controls="panel-film">Film</button>
+      </div>
+      <div class="strip" id="panel-time" role="tabpanel" aria-labelledby="tab-time"><div class="frames" id="timeFrames"></div></div>
+      <div class="strip" id="panel-era" role="tabpanel" aria-labelledby="tab-era"><div class="frames" id="eraFrames"></div></div>
+      <div class="strip" id="panel-film" role="tabpanel" aria-labelledby="tab-film"><div class="frames" id="filmFrames"></div></div>
+      <p id="caption"></p>
+    </div>
+  </div>
+
+  <div class="col">
+    <div>
+      <input type="file" id="file" accept="image/*">
+      <label for="file" class="btn filled">Choose Photo</label>
+      <p class="footnote">You can also drop a file on the photo or paste one.</p>
+    </div>
+
+    <div>
+      <h2 class="section-title">Strength</h2>
+      <div class="card list">
+        <div class="cell"><label for="sTime">Light <output id="oTime"></output></label><input type="range" id="sTime" min="0" max="100" value="100"></div>
+        <div class="cell"><label for="sEra">Era <output id="oEra"></output></label><input type="range" id="sEra" min="0" max="100" value="100"></div>
+        <div class="cell"><label for="sFilm">Film <output id="oFilm"></output></label><input type="range" id="sFilm" min="0" max="100" value="100"></div>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="section-title">Finish</h2>
+      <div class="card list">
+        <div class="cell"><label for="sGrain">Grain <output id="oGrain"></output></label><input type="range" id="sGrain" min="0" max="100" value="0"></div>
+        <div class="cell"><label for="sVig">Vignette <output id="oVig"></output></label><input type="range" id="sVig" min="0" max="100" value="0"></div>
+      </div>
+    </div>
+
+    <div>
+      <h2 class="section-title">Save or share at full size</h2>
+      <div class="pair">
+        <button class="btn" id="savePng" type="button">Save PNG</button>
+        <button class="btn" id="saveJpg" type="button">Save JPEG</button>
+      </div>
+      <p class="footnote" id="status" role="status" aria-live="polite"></p>
+      <p class="footnote">On iPhone, choose Save Image in the share sheet to add it to Photos.</p>
+    </div>
+
+    <div class="card"><button class="plain" id="reset" type="button">Reset Grade</button></div>
+  </div>
+</div>
+</div>
+
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">Your photo is ready</h2>
+    <p id="sheetInfo"></p>
+    <button class="btn filled" id="sheetShare" type="button">Save or Share</button>
+    <button class="btn quiet" id="sheetCancel" type="button">Cancel</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ---------- Look library ---------- */
+const BASE = { wb: [1, 1, 1], exp: 1, con: 1, sat: 1, mix: 0, bw: [.30, .59, .11],
+               sh: [0, 0, 0], hi: [0, 0, 0], lift: 0, white: 1, grain: 0, vig: 0, keepRed: 0 };
+
+const TIMES = [
+  { id: "none",    name: "As shot",    note: "No scene relight" },
+  { id: "day",     name: "Daytime",    note: "Crisp noon sun, blue skies",
+    wb: [1.03, 1, .97], exp: 1.05, con: 1.15, sat: 1.15, sh: [-.01, 0, .015], hi: [.015, .01, -.01] },
+  { id: "sunrise", name: "Sunrise",    note: "Peach haze, lavender shadows",
+    wb: [1.08, .99, .94], exp: 1.04, con: .92, sat: 1.05, sh: [0, -.01, .05], hi: [.06, .02, -.02], lift: .04 },
+  { id: "sunset",  name: "Sunset",     note: "Amber sun, violet shadows",
+    wb: [1.18, .98, .80], exp: .97, con: 1.18, sat: 1.25, sh: [.02, -.03, .06], hi: [.07, .02, -.06], lift: .01 },
+  { id: "night",   name: "Night-time", note: "Day-for-night moonlight blue",
+    wb: [.72, .92, 1.18], exp: .55, con: 1.25, sat: .55, sh: [-.03, 0, .05], hi: [-.02, .01, .04], lift: .01, white: .92 }
+];
+
+const ERAS = [
+  { id: "none", name: "No era", note: "Modern neutral" },
+  { id: "1920", name: "1920s", note: "Silent era, orthochromatic stock",
+    mix: 1, bw: [.15, .55, .30], con: 1.35, hi: [.01, .005, -.01], lift: .05, white: .93, grain: 50, vig: 55 },
+  { id: "1930", name: "1930s", note: "Studio silver with a sepia tone",
+    mix: 1, con: 1.1, sh: [.03, .01, -.02], hi: [.04, .02, -.03], lift: .04, white: .96, grain: 35, vig: 40 },
+  { id: "1940", name: "1940s", note: "Film noir, hard black and white",
+    mix: 1, bw: [.35, .55, .10], exp: .92, con: 1.7, sh: [0, 0, .01], grain: 30, vig: 50 },
+  { id: "1950", name: "1950s", note: "Three-strip Technicolor saturation",
+    wb: [1.04, 1, .97], con: 1.25, sat: 1.55, sh: [0, 0, .01], hi: [.02, .01, -.01], grain: 15, vig: 20 },
+  { id: "1960", name: "1960s", note: "Eastmancolor pastels, soft fade",
+    wb: [1.03, 1, .98], con: .95, sat: 1.1, sh: [.01, .02, .03], hi: [.03, .02, -.02], lift: .05, white: .97, grain: 20, vig: 20 },
+  { id: "1970", name: "1970s", note: "New Hollywood, warm and muted",
+    wb: [1.06, 1.02, .90], con: 1.05, sat: .82, sh: [.02, .03, -.01], hi: [.04, .03, -.04], lift: .06, white: .95, grain: 40, vig: 30 },
+  { id: "1980", name: "1980s", note: "Neon magenta and electric blue",
+    wb: [1, .97, 1.05], con: 1.3, sat: 1.3, sh: [0, -.02, .07], hi: [.06, -.01, .04], lift: .02, grain: 25, vig: 30 },
+  { id: "1990", name: "1990s", note: "Bleach bypass, green-tinged shadows",
+    wb: [.98, 1.02, 1], con: 1.45, sat: .7, sh: [-.01, .02, 0], hi: [0, .01, .01], grain: 30, vig: 25 },
+  { id: "2000", name: "2000s", note: "Teal and orange blockbuster",
+    con: 1.25, sat: 1.15, sh: [-.05, .02, .05], hi: [.06, .02, -.05], grain: 10, vig: 25 },
+  { id: "2010", name: "2010s", note: "Matte digital, lifted blacks",
+    con: .95, sat: .85, sh: [-.02, .02, .04], hi: [.02, .01, -.01], lift: .08, white: .94, grain: 5, vig: 15 },
+  { id: "2020", name: "2020s", note: "Large-format digital, soft roll-off",
+    wb: [1.02, 1, .98], con: 1.08, sat: .95, sh: [-.01, .01, .02], hi: [.02, .015, 0], lift: .03, white: .97, grain: 12, vig: 20 }
+];
+
+/* Approximations of each film's palette, built from the same controls as the eras. */
+const FILMS = [
+  { id: "none", name: "No film", note: "No reference look" },
+  { id: "batman", name: "The Batman", note: "2022 · Neo-noir, sodium amber, crimson kept",
+    wb: [1.06, .98, .88], exp: .78, con: 1.45, sat: .45, keepRed: 1.25, sh: [-.01, 0, .015], hi: [.05, .015, -.05], white: .95, grain: 22, vig: 55 },
+  { id: "strangers", name: "All of Us Strangers", note: "2023 · 35mm warmth, hazy rose glow",
+    wb: [1.07, 1, .93], exp: 1.03, con: .9, sat: .95, sh: [.03, 0, .03], hi: [.05, .025, -.02], lift: .07, white: .96, grain: 38, vig: 25 },
+  { id: "poor-bw", name: "Poor Things B&W", note: "2023 · Stark clinical monochrome",
+    mix: 1, bw: [.25, .60, .15], con: 1.5, lift: .02, white: .97, grain: 30, vig: 45 },
+  { id: "poor-colour", name: "Poor Things Colour", note: "2023 · Surreal candy pastels",
+    wb: [1.02, 1, 1.02], con: 1.05, sat: 1.6, sh: [0, .03, .06], hi: [.05, .02, .03], lift: .05, grain: 22, vig: 40 },
+  { id: "nosferatu", name: "Nosferatu", note: "2024 · Moonlit blue-grey gloom",
+    wb: [.82, .97, 1.12], exp: .72, con: 1.35, sat: .22, sh: [-.02, 0, .03], hi: [-.01, .01, .03], lift: .01, white: .9, grain: 28, vig: 50 },
+  { id: "wicked", name: "Wicked", note: "2024 · Emerald and pink, bright soft haze",
+    wb: [1, 1.02, .99], exp: 1.08, con: .88, sat: 1.3, sh: [-.02, .04, .01], hi: [.05, 0, .03], lift: .06, grain: 5, vig: 10 }
+];
+
+/* Bake white balance, exposure (with a soft shoulder) and contrast into 1D tables. */
+function compile(def) {
+  if (def.id === "none") return null;
+  const p = Object.assign({}, BASE, def);
+  const N = 1024, lut = [new Float32Array(N), new Float32Array(N), new Float32Array(N)];
+  for (let c = 0; c < 3; c++) {
+    const g = p.wb[c] * p.exp;
+    for (let i = 0; i < N; i++) {
+      const x = i / (N - 1);
+      let v = g > 1 ? (g * x) / (1 + (g - 1) * x) : g * x;
+      if (p.con !== 1 && v > 0 && v < 1) {
+        const a = Math.pow(v, p.con), b = Math.pow(1 - v, p.con);
+        v = a / (a + b);
+      }
+      lut[c][i] = v;
+    }
+  }
+  p.lut = lut;
+  return p;
+}
+TIMES.forEach(t => t.c = compile(t));
+ERAS.forEach(e => e.c = compile(e));
+FILMS.forEach(f => f.c = compile(f));
+
+/* ---------- Pixel pipeline ---------- */
+function grade(src, dst, w, h, stages, grain, vig) {
+  const cx = (w - 1) / 2, cy = (h - 1) / 2, inv = 1 / (cx * cx + cy * cy || 1);
+  const cell = Math.max(1, Math.round(Math.max(w, h) / 1400));   // keep grain size constant at export
+  const ga = grain * .10, n = stages.length;
+  for (let y = 0, i = 0; y < h; y++) {
+    const dy = y - cy, gy = (y / cell) | 0;
+    for (let x = 0; x < w; x++, i += 4) {
+      let r = src[i] / 255, g = src[i + 1] / 255, b = src[i + 2] / 255;
+      for (let s = 0; s < n; s++) {
+        const p = stages[s][0], k = stages[s][1];
+        let R = p.lut[0][(r * 1023 + .5) | 0], G = p.lut[1][(g * 1023 + .5) | 0], B = p.lut[2][(b * 1023 + .5) | 0];
+        if (p.mix > 0) {
+          const m = p.bw[0] * R + p.bw[1] * G + p.bw[2] * B;
+          R += (m - R) * p.mix; G += (m - G) * p.mix; B += (m - B) * p.mix;
+        }
+        const L = .2126 * R + .7152 * G + .0722 * B;
+        let sat = p.sat;
+        if (p.keepRed) { let q = (R - (G > B ? G : B)) * 4; q = q < 0 ? 0 : q > 1 ? 1 : q; sat += (p.keepRed - sat) * q; }
+        if (sat !== 1) { R = L + (R - L) * sat; G = L + (G - L) * sat; B = L + (B - L) * sat; }
+        const Lc = L < 0 ? 0 : L > 1 ? 1 : L, ws = (1 - Lc) * (1 - Lc), wh = Lc * Lc;
+        R += p.sh[0] * ws + p.hi[0] * wh; G += p.sh[1] * ws + p.hi[1] * wh; B += p.sh[2] * ws + p.hi[2] * wh;
+        const span = p.white - p.lift;
+        R = p.lift + R * span; G = p.lift + G * span; B = p.lift + B * span;
+        r += (R - r) * k; g += (G - g) * k; b += (B - b) * k;
+        r = r < 0 ? 0 : r > 1 ? 1 : r; g = g < 0 ? 0 : g > 1 ? 1 : g; b = b < 0 ? 0 : b > 1 ? 1 : b;
+      }
+      if (vig > 0) {
+        const dx = x - cx, d = (dx * dx + dy * dy) * inv, f = 1 - vig * .75 * d * (.45 + .55 * d);
+        r *= f; g *= f; b *= f;
+      }
+      if (ga > 0) {
+        let hsh = Math.imul((x / cell) | 0, 374761393) + Math.imul(gy, 668265263) | 0;
+        hsh = Math.imul(hsh ^ (hsh >>> 13), 1274126177); hsh ^= hsh >>> 16;
+        const L = .2126 * r + .7152 * g + .0722 * b;
+        const nz = ((hsh & 0xffff) / 32768 - 1) * ga * (1 - .6 * Math.abs(2 * L - 1));
+        r += nz; g += nz; b += nz;
+      }
+      dst[i] = r * 255 + .5; dst[i + 1] = g * 255 + .5; dst[i + 2] = b * 255 + .5; dst[i + 3] = src[i + 3];
+    }
+  }
+}
+
+/* ---------- State ---------- */
+const $ = id => document.getElementById(id);
+const view = $("view"), vctx = view.getContext("2d", { willReadFrequently: true });
+const state = { tab: "time", time: "sunset", era: "1970", film: "none", split: .3, name: "sample-frame", source: null, isSample: true };
+let orig = null, out = null, thumbSrc = null, queued = false;
+const PREVIEW_MAX = 1400, EXPORT_MAX = 6000, EXPORT_AREA = 16000000, TW = 114, TH = 72;
+
+const lookOf = (list, id) => list.find(l => l.id === id);
+function stages() {
+  const s = [], t = lookOf(TIMES, state.time).c, e = lookOf(ERAS, state.era).c;
+  if (t && +$("sTime").value > 0) s.push([t, $("sTime").value / 100]);
+  if (e && +$("sEra").value > 0) s.push([e, $("sEra").value / 100]);
+  const f = lookOf(FILMS, state.film).c;
+  if (f && +$("sFilm").value > 0) s.push([f, $("sFilm").value / 100]);
+  return s;
+}
+
+function render() {
+  queued = false;
+  if (!orig) return;
+  grade(orig.data, out.data, orig.width, orig.height, stages(), $("sGrain").value / 100, $("sVig").value / 100);
+  paint();
+}
+function paint() {
+  vctx.putImageData(out, 0, 0);
+  const sx = Math.round(state.split * view.width);
+  if (sx > 0) vctx.putImageData(orig, 0, 0, 0, 0, sx, view.height);
+  $("split").style.left = (state.split * 100) + "%";
+  $("split").setAttribute("aria-valuenow", Math.round(state.split * 100));
+  $("tagL").style.visibility = state.split > .12 ? "visible" : "hidden";
+}
+function schedule() { if (!queued) { queued = true; requestAnimationFrame(render); } }
+
+function readouts() {
+  for (const k of ["Time", "Era", "Film", "Grain", "Vig"]) {
+    $("o" + k).textContent = $("s" + k).value + "%";
+    $("s" + k).style.setProperty("--p", $("s" + k).value + "%");
+  }
+  const t = lookOf(TIMES, state.time), e = lookOf(ERAS, state.era);
+  const f = lookOf(FILMS, state.film);
+  const cur = { time: t, era: e, film: f }[state.tab], cap = $("caption");
+  cap.textContent = ""; const nm = document.createElement("b"); nm.textContent = cur.name;
+  cap.append(nm, "  " + cur.note);
+  const on = [t, e, f].filter(l => l.id !== "none").map(l => l.name);
+  $("tagR").textContent = on.length ? on.join(" + ") : "No grade";
+  for (const k of ["time", "era", "film"]) {
+    $("tab-" + k).setAttribute("aria-selected", String(k === state.tab));
+    $("panel-" + k).hidden = k !== state.tab;
+  }
+  document.querySelectorAll(".look").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.id === state[b.dataset.kind])));
+}
+
+/* ---------- Film strips ---------- */
+function buildStrip(list, kind, host) {
+  for (const l of list) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "look"; b.dataset.id = l.id; b.dataset.kind = kind;
+    const c = document.createElement("canvas"); c.width = TW; c.height = TH;
+    const n = document.createElement("span"); n.textContent = l.name;
+    b.append(c, n);
+    b.addEventListener("click", () => {
+      state[kind] = l.id;
+      if (kind !== "time") {           // each stock brings its own grain and lens falloff
+        const e = lookOf(ERAS, state.era), f = lookOf(FILMS, state.film);
+        $("sGrain").value = Math.max(e.grain || 0, f.grain || 0);
+        $("sVig").value = Math.max(e.vig || 0, f.vig || 0);
+      }
+      readouts(); schedule();
+    });
+    host.append(b); l.thumb = c;
+  }
+}
+function drawThumbs() {
+  if (!thumbSrc) return;
+  for (const l of TIMES.concat(ERAS, FILMS)) {
+    const ctx = l.thumb.getContext("2d"), img = ctx.createImageData(TW, TH);
+    grade(thumbSrc.data, img.data, TW, TH, l.c ? [[l.c, 1]] : [], 0, (l.vig || 0) / 100);
+    ctx.putImageData(img, 0, 0);
+  }
+}
+
+/* ---------- Loading ---------- */
+function setSource(drawable, w, h, name, isSample) {
+  state.source = drawable; state.name = name; state.isSample = isSample;
+  const k = Math.min(1, PREVIEW_MAX / Math.max(w, h));
+  view.width = Math.max(1, Math.round(w * k)); view.height = Math.max(1, Math.round(h * k));
+  vctx.drawImage(drawable, 0, 0, view.width, view.height);
+  orig = vctx.getImageData(0, 0, view.width, view.height);
+  out = vctx.createImageData(view.width, view.height);
+  const tc = document.createElement("canvas"); tc.width = TW; tc.height = TH;
+  const tctx = tc.getContext("2d"), cover = Math.max(TW / w, TH / h);
+  tctx.drawImage(drawable, (TW - w * cover) / 2, (TH - h * cover) / 2, w * cover, h * cover);
+  thumbSrc = tctx.getImageData(0, 0, TW, TH);
+  $("meta").textContent = (isSample ? "Sample photo" : name) + " · " + w + " × " + h + " px";
+  drawThumbs(); render();
+}
+function openFile(f) {
+  if (!f) return;
+  if (!f.type.startsWith("image/")) { say("That file is not an image. Choose a JPEG, PNG or WebP."); return; }
+  const url = URL.createObjectURL(f), img = new Image();
+  img.onload = () => {
+    setSource(img, img.naturalWidth, img.naturalHeight, (f.name || "image").replace(/\.[^.]+$/, ""), false);
+    URL.revokeObjectURL(url); say("");
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); say("This browser cannot read that image. Try a JPEG or PNG copy."); };
+  img.src = url;
+}
+function say(t) { $("status").textContent = t; }
+
+/* A neutral daylight scene so every look has sky, foliage, skin and a red to work on. */
+function sampleFrame() {
+  const c = document.createElement("canvas"); c.width = 1600; c.height = 900;
+  const x = c.getContext("2d");
+  const grad = (y0, y1, a, b) => { const g = x.createLinearGradient(0, y0, 0, y1); g.addColorStop(0, a); g.addColorStop(1, b); return g; };
+  const poly = (pts, fill) => { x.beginPath(); x.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) x.lineTo(pts[i], pts[i + 1]); x.closePath(); x.fillStyle = fill; x.fill(); };
+  const blob = (cx, cy, rx, ry, fill) => { x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, 7); x.fillStyle = fill; x.fill(); };
+  x.fillStyle = grad(0, 520, "#4c8bd4", "#c2def2"); x.fillRect(0, 0, 1600, 520);
+  for (const [cx, cy, s] of [[260, 150, 1], [330, 170, .8], [190, 175, .7], [980, 110, 1.2], [1080, 135, .9], [1380, 220, .8], [1450, 235, .6]])
+    blob(cx, cy, 110 * s, 34 * s, "rgba(255,255,255,.88)");
+  poly([0, 520, 0, 380, 180, 300, 330, 370, 520, 250, 700, 360, 860, 290, 1040, 390, 1230, 270, 1420, 360, 1600, 310, 1600, 520], "#7f95b3");
+  poly([520, 250, 575, 286, 548, 292, 520, 280, 492, 300, 470, 282], "#eef3f8");
+  poly([1230, 270, 1290, 300, 1255, 306, 1228, 296, 1196, 312, 1180, 296], "#eef3f8");
+  poly([0, 520, 0, 450, 240, 410, 480, 460, 760, 420, 1000, 470, 1300, 430, 1600, 465, 1600, 520], "#4f7462");
+  x.fillStyle = grad(520, 640, "#78abd0", "#3d6f97"); x.fillRect(0, 520, 1600, 120);
+  x.fillStyle = "rgba(255,255,255,.22)"; for (let i = 0; i < 9; i++) x.fillRect(120 + i * 170, 548 + (i % 3) * 26, 90, 3);
+  x.fillStyle = grad(620, 900, "#93b44c", "#4c782c");
+  x.beginPath(); x.moveTo(0, 640); x.quadraticCurveTo(800, 590, 1600, 635); x.lineTo(1600, 900); x.lineTo(0, 900); x.fill();
+  x.fillStyle = "#d8b648"; x.beginPath(); x.moveTo(0, 760); x.quadraticCurveTo(700, 700, 1600, 790); x.lineTo(1600, 850); x.quadraticCurveTo(700, 770, 0, 830); x.fill();
+  x.fillStyle = "#6a4630"; x.fillRect(318, 520, 34, 150);
+  for (const [cx, cy, r, col] of [[335, 470, 95, "#2f5d2a"], [270, 520, 70, "#376b30"], [400, 515, 72, "#2a5426"], [335, 410, 62, "#3f7a36"]]) blob(cx, cy, r, r * .9, col);
+  x.fillStyle = "#8d5c3d"; x.fillRect(1010, 560, 250, 130);
+  poly([985, 565, 1135, 470, 1285, 565], "#b3392d");
+  x.fillStyle = "#f5db88"; x.fillRect(1040, 595, 56, 48); x.fillRect(1180, 595, 56, 48);
+  x.fillStyle = "#4a2f20"; x.fillRect(1118, 600, 40, 90);
+  x.fillStyle = "#2c3f66"; x.fillRect(742, 716, 15, 62); x.fillRect(762, 716, 15, 62);
+  x.fillStyle = "#c8322b"; x.fillRect(734, 640, 52, 82);
+  blob(760, 618, 20, 23, "#e0ac8a"); blob(760, 603, 21, 12, "#3a2a20");
+  return c;
+}
+
+/* ---------- Export ---------- */
+let pendingFile = null;
+function download(blob, filename) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  say("Saved " + filename + ".");
+}
+async function share(file) {
+  try { await navigator.share({ files: [file] }); say("Done."); return "ok"; }
+  catch (e) { if (e && e.name === "AbortError") { say("Save cancelled."); return "ok"; } return e && e.name === "NotAllowedError" ? "gesture" : "fail"; }
+}
+/* Share sheet first (Save Image puts it in Photos); plain download where sharing files is unsupported. */
+async function deliver(blob, filename, w, h) {
+  const file = new File([blob], filename, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    const r = await share(file);
+    if (r === "ok") return;
+    if (r === "gesture") {          // rendering outlasted the tap, so ask for one more
+      pendingFile = file; $("sheetInfo").textContent = filename + " · " + w + " × " + h + " px";
+      $("scrim").hidden = false; $("sheetShare").focus(); say(""); return;
+    }
+  }
+  download(blob, filename);
+}
+
+async function save(ext) {
+  const btns = [$("savePng"), $("saveJpg")];
+  btns.forEach(b => b.disabled = true);
+  say("Rendering at full size…");
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const src = state.source, sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+    const k = Math.min(1, EXPORT_MAX / Math.max(sw, sh), Math.sqrt(EXPORT_AREA / (sw * sh)));
+    const c = document.createElement("canvas"); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    const ctx = c.getContext("2d");
+    if (ext === "jpg") { ctx.fillStyle = "#000"; ctx.fillRect(0, 0, c.width, c.height); }
+    ctx.drawImage(src, 0, 0, c.width, c.height);
+    const img = ctx.getImageData(0, 0, c.width, c.height);
+    grade(img.data, img.data, c.width, c.height, stages(), $("sGrain").value / 100, $("sVig").value / 100);
+    ctx.putImageData(img, 0, 0);
+    const blob = await new Promise(r => c.toBlob(r, ext === "jpg" ? "image/jpeg" : "image/png", .93));
+    if (!blob) throw new Error("encode");
+    const filename = [state.name, state.time !== "none" ? state.time : "", state.era !== "none" ? state.era + "s" : "", state.film !== "none" ? state.film : "", "grade"]
+      .filter(Boolean).join("-") + "." + ext;
+    await deliver(blob, filename, c.width, c.height);
+  } catch (e) {
+    say("Export failed. The image may be too large for this browser's memory.");
+  }
+  btns.forEach(b => b.disabled = false);
+}
+
+/* ---------- Wiring ---------- */
+buildStrip(TIMES, "time", $("timeFrames"));
+buildStrip(ERAS, "era", $("eraFrames"));
+buildStrip(FILMS, "film", $("filmFrames"));
+document.querySelectorAll(".segmented button").forEach(b => b.addEventListener("click", () => { state.tab = b.dataset.tab; readouts(); }));
+for (const id of ["sTime", "sEra", "sFilm", "sGrain", "sVig"]) $(id).addEventListener("input", () => { readouts(); schedule(); });
+$("file").addEventListener("change", e => { openFile(e.target.files[0]); e.target.value = ""; });
+$("savePng").addEventListener("click", () => save("png"));
+$("saveJpg").addEventListener("click", () => save("jpg"));
+$("reset").addEventListener("click", () => {
+  state.time = "none"; state.era = "none"; state.film = "none";
+  $("sTime").value = 100; $("sEra").value = 100; $("sFilm").value = 100; $("sGrain").value = 0; $("sVig").value = 0;
+  readouts(); schedule(); say("Grade reset. The original is showing.");
+});
+
+$("sheetShare").addEventListener("click", async () => {
+  const f = pendingFile; pendingFile = null; $("scrim").hidden = true;
+  if (f && await share(f) !== "ok") download(f, f.name);
+});
+$("sheetCancel").addEventListener("click", () => { pendingFile = null; $("scrim").hidden = true; say("Save cancelled."); });
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+
+const frame = $("frame");
+let dragging = false;
+const setSplit = v => { state.split = Math.min(1, Math.max(0, v)); if (out) paint(); };
+const fromPointer = e => { const r = view.getBoundingClientRect(); setSplit((e.clientX - r.left) / r.width); };
+frame.addEventListener("pointerdown", e => { dragging = true; frame.setPointerCapture(e.pointerId); fromPointer(e); });
+frame.addEventListener("pointermove", e => { if (dragging) fromPointer(e); });
+frame.addEventListener("pointerup", () => dragging = false);
+frame.addEventListener("pointercancel", () => dragging = false);
+$("split").addEventListener("keydown", e => {
+  const step = e.shiftKey ? .1 : .02;
+  if (e.key === "ArrowLeft") setSplit(state.split - step);
+  else if (e.key === "ArrowRight") setSplit(state.split + step);
+  else if (e.key === "Home") setSplit(0);
+  else if (e.key === "End") setSplit(1);
+  else return;
+  e.preventDefault();
+});
+
+const viewer = $("viewer");
+viewer.addEventListener("dragover", e => { e.preventDefault(); viewer.classList.add("drop"); });
+viewer.addEventListener("dragleave", () => viewer.classList.remove("drop"));
+viewer.addEventListener("drop", e => { e.preventDefault(); viewer.classList.remove("drop"); openFile(e.dataTransfer.files[0]); });
+window.addEventListener("paste", e => {
+  const item = [...(e.clipboardData ? e.clipboardData.items : [])].find(i => i.type.startsWith("image/"));
+  if (item) openFile(item.getAsFile());
+});
+
+/* Opening state: the sample frame with a 1970s sunset, so the tool shows what it does. */
+const startEra = lookOf(ERAS, state.era);
+$("sGrain").value = startEra.grain; $("sVig").value = startEra.vig;
+readouts();
+const s = sampleFrame();
+setSource(s, s.width, s.height, "sample-frame", true);
+say("");
+</script>
+</body>
+</html>
